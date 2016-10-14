@@ -120,6 +120,7 @@
 #define DOUBLE_CLICK      2
 #define LONG_CLICK        3
 #define LONG_LONG_CLICK   4
+#define WAKEUP_CLICK      5
 
 // Button pins go low or high on button clicks
 #define BUTTON_PRESSED    LOW
@@ -129,7 +130,7 @@
 #define LED_ON            HIGH
 
 // Release information
-#define VER_DATE_STRING   "2016-08-20"
-#define VER_INFO_STRING   "v1.4 by Dvogonen"
+#define VER_DATE_STRING   "UNFINISHED"
+#define VER_INFO_STRING   "v1.5 by Dvogonen"
 
 #endif // cyclop_plus_h

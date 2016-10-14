@@ -50,15 +50,15 @@
 //******************************************************************************
 //* File scope function declarations
 
+void     activateScreenSaver( void );
 uint16_t autoScan( uint16_t frequency );
 uint16_t averageAnalogRead( uint8_t pin );
 void     batteryMeter(void);
 uint8_t  bestChannelMatch( uint16_t frequency );
-void     disolveDisplay(void);
+void     dissolveDisplay(void);
 void     drawAutoScanScreen(void);
 void     drawBattery(uint8_t xPos, uint8_t yPos, uint8_t value );
 void     drawChannelScreen( uint8_t channel, uint16_t rssi);
-void     drawEmptyScreen( void );
 void     drawOptionsScreen(uint8_t option );
 void     drawScannerScreen( void );
 void     drawStartScreen(void);
@@ -72,6 +72,11 @@ void     resetOptions(void);
 char    *shortNameOfChannel(uint8_t channel, char *name);
 void     setRTC6715Frequency(uint16_t frequency);
 void     setOptions( void );
+void     spi_0(void);
+void     spi_1(void);
+void     spiEnableHigh( void );
+void     spiEnableLow( void );
+int      spiRead( void );
 void     testAlarm( void );
 void     updateScannerScreen(uint8_t position, uint8_t value );
 void     writeEeprom(void);
@@ -129,6 +134,7 @@ uint8_t alarmSoundOn = 0;
 uint16_t alarmOnPeriod = 0;
 uint16_t alarmOffPeriod = 0;
 uint8_t options[MAX_OPTIONS];
+uint8_t saveScreenActive = 0;
 
 //******************************************************************************
 //* function: setup
@@ -199,6 +205,9 @@ void loop()
     case NO_CLICK: // do nothing
       break;
 
+    case WAKEUP_CLICK:  // do nothing
+      break;
+
     case LONG_LONG_CLICK: // graphical band scanner
       currentChannel = bestChannelMatch(graphicScanner(getFrequency(currentChannel)));
       drawChannelScreen(currentChannel, 0);
@@ -224,14 +233,14 @@ void loop()
       drawChannelScreen(currentChannel, 0);
       break;
   }
-  // Reset screensaver timer after key click
+  // Reset screensaver timer after each key click
   if  (lastClick != NO_CLICK )
     saveScreenTimer = millis() + SAVE_SCREEN_DELAY_MS;
 
   // Check if the display needs updating
   if ( millis() > displayUpdateTimer ) {
     if ( options[SAVE_SCREEN_OPTION] && (saveScreenTimer < millis()))
-      drawEmptyScreen();
+      activateScreenSaver();
     else
     {
       currentRssi = averageAnalogRead(RSSI_PIN);
@@ -322,6 +331,13 @@ uint8_t getClickType(uint8_t buttonPin) {
   if (digitalRead(buttonPin) == !BUTTON_PRESSED)
     return ( NO_CLICK );
 
+  // If the screen saver is active the key press is just a wakeup call
+  if (saveScreenActive) {
+    saveScreenActive = 0;
+    while (digitalRead(buttonPin) == BUTTON_PRESSED) ;
+    return ( WAKEUP_CLICK );
+  }
+
   while (digitalRead(buttonPin) == BUTTON_PRESSED) {
     timer++;
     delay(5);
@@ -340,7 +356,7 @@ uint8_t getClickType(uint8_t buttonPin) {
   }
   if (timer >= 40)                  // 40 * 5 ms = 0.2s
     return click_type;
-    
+
   if (digitalRead(buttonPin) == BUTTON_PRESSED ) {
     click_type = DOUBLE_CLICK;
     while (digitalRead(buttonPin) == BUTTON_PRESSED) ;
@@ -543,6 +559,42 @@ char *longNameOfChannel(uint8_t channel, char *name)
 }
 
 //******************************************************************************
+//* function: readRTC6715Register  - NOT TESTED!
+//*         : Returns the contents of a given register in  long.
+//*         : The 20 LSB of the long is the register content. The rest is zero
+//*         : padding.
+//*
+//* SPI data: 4  bits  Register Address  LSB first
+//*         : 1  bit   Read or Write     0=Read 1=Write
+//*         : 20 bits  Register content
+//******************************************************************************
+long readRTC6715Register( uint8_t reg )
+{
+  long retVal = 0;
+  uint8_t i;
+
+  // Enable SPI
+  spiEnableHigh();
+  spiEnableLow();
+
+  // Address (4 LSB bits)
+  for (i = 4; i; i--, reg >>= 1 ) {
+    (reg & 0x1) ? spi_1() : spi_0();
+  }
+  // Read/Write bit
+  spi_0(); // Read
+
+  // Data (20 LSB bits)
+  for (i = 20; i; i--, retVal <<= 1 ) {
+    spiRead() ? retVal &= 0x01 : retVal &= 0x00;
+  }
+  // Disable SPI
+  spiEnableHigh();
+
+  return retVal;
+}
+
+//******************************************************************************
 //* function: calcFrequencyData
 //*         : calculates the frequency value for the syntheziser register B of
 //*         : the RTC6751 circuit that is used within the RX5808/RX5880 modules.
@@ -581,7 +633,7 @@ void setRTC6715Frequency(uint16_t frequency)
 
   // Bit bang the syntheziser register
 
-  // Clock
+  // Enable SPI pin
   spiEnableHigh();
   delayMicroseconds(1);
   spiEnableLow();
@@ -605,7 +657,7 @@ void setRTC6715Frequency(uint16_t frequency)
   spi_0();
   spi_0();
 
-  // Clock
+  // Disable SPI pin
   spiEnableHigh();
   delayMicroseconds(1);
 
@@ -617,7 +669,7 @@ void setRTC6715Frequency(uint16_t frequency)
 //******************************************************************************
 //* function: spi_1
 //******************************************************************************
-void spi_1()
+void spi_1( void )
 {
   digitalWrite(SPI_CLOCK_PIN, LOW);
   delayMicroseconds(1);
@@ -632,7 +684,7 @@ void spi_1()
 //******************************************************************************
 //* function: spi_0
 //******************************************************************************
-void spi_0()
+void spi_0( void )
 {
   digitalWrite(SPI_CLOCK_PIN, LOW);
   delayMicroseconds(1);
@@ -645,9 +697,25 @@ void spi_0()
 }
 
 //******************************************************************************
+//* function: spiRead  - NOT TESTED!
+//******************************************************************************
+int spiRead( void )
+{
+  int retVal;
+  digitalWrite(SPI_CLOCK_PIN, LOW);
+  delayMicroseconds(1);
+  digitalWrite(SPI_CLOCK_PIN, HIGH);
+  delayMicroseconds(1);
+  digitalWrite(SPI_CLOCK_PIN, LOW);
+  retVal = digitalRead(SPI_DATA_PIN);
+  delayMicroseconds(1);
+  return retVal;
+}
+
+//******************************************************************************
 //* function: spiEnableLow
 //******************************************************************************
-void spiEnableLow()
+void spiEnableLow( void )
 {
   delayMicroseconds(1);
   digitalWrite(SLAVE_SELECT_PIN, LOW);
@@ -657,7 +725,7 @@ void spiEnableLow()
 //******************************************************************************
 //* function: spiEnableHigh
 //******************************************************************************
-void spiEnableHigh()
+void spiEnableHigh( void )
 {
   delayMicroseconds(1);
   digitalWrite(SLAVE_SELECT_PIN, HIGH);
@@ -806,11 +874,11 @@ void testAlarm( void ) {
 //* Screen functions
 //******************************************************************************
 //******************************************************************************
-//* function: disolveDisplay
-//*         : fancy graphics stuff that disolves the screen into black
+//* function: dissolveDisplay
+//*         : fancy graphics stuff that dissolves the screen into black
 //*         : unnecessary, but fun
 //******************************************************************************
-void disolveDisplay(void)
+void dissolveDisplay(void)
 {
   uint8_t x, y, i = 30;
   uint16_t j;
@@ -835,6 +903,7 @@ void disolveDisplay(void)
 //******************************************************************************
 void drawStartScreen( void ) {
   uint8_t i;
+
   display.clearDisplay();
   display.drawLine(0, 0, 127, 0, WHITE);
   display.setTextColor(WHITE);
@@ -856,7 +925,7 @@ void drawStartScreen( void ) {
       return;
     delay(10);
   }
-  disolveDisplay();
+  dissolveDisplay();
   return;
 }
 
@@ -903,6 +972,7 @@ void drawChannelScreen( uint8_t channel, uint16_t rssi) {
 //* function: drawAutoScanScreen
 //******************************************************************************
 void drawAutoScanScreen( void ) {
+
   display.clearDisplay();
   display.setTextColor(WHITE);
   display.setCursor(10, 0);
@@ -923,6 +993,7 @@ void drawAutoScanScreen( void ) {
 //* function: drawScannerScreen
 //******************************************************************************
 void drawScannerScreen( void ) {
+
   display.clearDisplay();
   display.drawLine(0, 55, 127, 55, WHITE);
   display.setTextColor(WHITE);
@@ -966,6 +1037,7 @@ void updateScannerScreen(uint8_t position, uint8_t value ) {
 //*         : value = 0 to 100
 //******************************************************************************
 void drawBattery(uint8_t xPos, uint8_t yPos, uint8_t value ) {
+
   display.drawRect(3 + xPos,  0 + yPos, 4, 2, WHITE);
   display.drawRect(0 + xPos, 2 + yPos, 10, 20, WHITE);
   display.drawRect(2 + xPos,  4 + yPos, 6, 16, BLACK);
@@ -986,6 +1058,7 @@ void drawBattery(uint8_t xPos, uint8_t yPos, uint8_t value ) {
 //******************************************************************************
 void drawOptionsScreen(uint8_t option ) {
   uint8_t i, j;
+
   display.clearDisplay();
   display.setCursor(0, 0);
   display.setTextSize(1);
@@ -1031,11 +1104,12 @@ void drawOptionsScreen(uint8_t option ) {
 }
 
 //******************************************************************************
-//* function: drawEmptyScreen
+//* function: activateScreenSaver
 //******************************************************************************
-void drawEmptyScreen( void)
+void activateScreenSaver( void)
 {
   display.clearDisplay();
   display.display();
+  saveScreenActive = 1;
 }
 
