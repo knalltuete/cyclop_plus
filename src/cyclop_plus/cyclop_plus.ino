@@ -82,6 +82,7 @@ int      spiRead( void );
 void     testAlarm( void );
 void     updateScannerScreen(uint8_t position, uint8_t value );
 void     writeEeprom(void);
+void     switchVideoSource(void);
 
 
 //******************************************************************************
@@ -217,6 +218,11 @@ void loop()
     case WAKEUP_CLICK:  // do nothing
       break;
 
+    case EVEN_LONGER_CLICK: // switch video source
+      switchVideoSource();
+      displayUpdateTimer = millis() +  RSSI_STABILITY_DELAY_MS ;
+      break;
+    
     case LONG_LONG_CLICK: // graphical band scanner
       currentChannel = bestChannelMatch(graphicScanner(getFrequency(currentChannel)));
       drawChannelScreen(currentChannel, 0);
@@ -329,8 +335,8 @@ bool readEeprom(void) {
 //******************************************************************************
 //* function: get_click_type
 //*         : Polls the specified pin and returns the type of click that was
-//*         : performed NO_CLICK, SINGLE_CLICK, DOUBLE_CLICK, LONG_CLICK
-//*         : or LONG_LONG_CLICK
+//*         : performed NO_CLICK, SINGLE_CLICK, DOUBLE_CLICK, LONG_CLICK,
+//*         : LONG_LONG_CLICK or EVEN_LONGER_CLICK
 //******************************************************************************
 uint8_t getClickType(uint8_t buttonPin) {
   uint16_t timer = 0;
@@ -351,13 +357,15 @@ uint8_t getClickType(uint8_t buttonPin) {
     timer++;
     delay(5);
   }
-  if (timer < 120)                  // 120 * 5 ms = 0.6s
+  if (timer < 120)                  //  120 * 5 ms = 0.6s
     click_type = SINGLE_CLICK;
-  if (timer >= 80 && timer < 300 )  // 300 * 5 ms = 1.5s
+  if (timer >= 80 && timer < 300)   //  300 * 5 ms = 1.5s
     click_type = LONG_CLICK;
-  if (timer >= 300)
+  if (timer >= 300 && timer < 1000) // 1000 * 5 ms = 5.0s
     click_type = LONG_LONG_CLICK;
-
+  if (timer >= 1000)
+    click_type = EVEN_LONGER_CLICK;
+    
   // Check if there is a second click
   timer = 0;
   while ((digitalRead(buttonPin) == !BUTTON_PRESSED) && (timer++ < 40)) {
@@ -1121,4 +1129,15 @@ void activateScreenSaver( void)
   display.display();
   saveScreenActive = 1;
 }
+
+//******************************************************************************
+//* function: switchVideoSource
+//******************************************************************************
+void switchVideoSource(void)
+{
+
+  
+}
+
+
 

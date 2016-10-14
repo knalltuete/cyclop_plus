@@ -83,10 +83,10 @@
 #define ALARM_MIN_ON      200
 #define ALARM_MIN_OFF     3000
 
-// PWM timing constants (in micro seconds)
-#define PWM_LOW           800
-#define PWM_MID           1500
-#define PWM_HIGH          2200
+// video sources represented as PWM timing constants (in micro seconds)
+#define VIDEO_1           800
+#define VIDEO_2           1500
+#define VIDEO_3           2200
 
 
 // Digital pin definitions
@@ -128,6 +128,7 @@
 #define LONG_CLICK        3
 #define LONG_LONG_CLICK   4
 #define WAKEUP_CLICK      5
+#define EVEN_LONGER_CLICK 6
 
 // Button pins go low or high on button clicks
 #define BUTTON_PRESSED    LOW
