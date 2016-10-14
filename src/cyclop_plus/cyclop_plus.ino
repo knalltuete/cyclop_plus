@@ -39,6 +39,8 @@
 #include <avr/pgmspace.h>
 #include <string.h>
 #include <EEPROM.h>
+#include <Servo.h>
+
 #ifdef SSD1306_OLED_DRIVER
 #include <Adafruit_SSD1306.h>
 #endif
@@ -80,6 +82,7 @@ int      spiRead( void );
 void     testAlarm( void );
 void     updateScannerScreen(uint8_t position, uint8_t value );
 void     writeEeprom(void);
+
 
 //******************************************************************************
 //* Positions in the frequency table for the 40 channels
@@ -135,6 +138,7 @@ uint16_t alarmOnPeriod = 0;
 uint16_t alarmOffPeriod = 0;
 uint8_t options[MAX_OPTIONS];
 uint8_t saveScreenActive = 0;
+Servo    inputSwitch;
 
 //******************************************************************************
 //* function: setup
@@ -185,6 +189,11 @@ void setup()
     if (options[FLIP_SCREEN_OPTION])
       display.setRotation(2);
   }
+
+  // Enable PWM mode for input switch
+  inputSwitch.attach(PWM_PIN);
+  inputSwitch.writeMicroseconds(PWM_LOW);
+  
   // Show start screen
   if (options[SHOW_STARTSCREEN_OPTION])
     drawStartScreen();

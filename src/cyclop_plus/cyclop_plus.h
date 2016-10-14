@@ -83,6 +83,12 @@
 #define ALARM_MIN_ON      200
 #define ALARM_MIN_OFF     3000
 
+// PWM timing constants (in micro seconds)
+#define PWM_LOW           800
+#define PWM_MID           1500
+#define PWM_HIGH          2200
+
+
 // Digital pin definitions
 #define SPI_CLOCK_PIN     2
 #define SLAVE_SELECT_PIN  3
@@ -90,6 +96,7 @@
 #define BUTTON_PIN        5
 #define ALARM_PIN         6
 #define LED_PIN           13
+#define PWM_PIN           7
 
 // Analog pin definitions
 #define VOLTAGE_METER_PIN A1
