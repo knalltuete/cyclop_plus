@@ -82,6 +82,7 @@ int      spiRead( void );
 void     testAlarm( void );
 void     updateScannerScreen(uint8_t position, uint8_t value );
 void     writeEeprom(void);
+void     new_drawChannelScreen( uint8_t channel, uint16_t rssi);
 void     switchVideoSource(void);
 
 
@@ -139,6 +140,7 @@ uint16_t alarmOnPeriod = 0;
 uint16_t alarmOffPeriod = 0;
 uint8_t options[MAX_OPTIONS];
 uint8_t saveScreenActive = 0;
+uint16_t videoSource;
 Servo    inputSwitch;
 
 //******************************************************************************
@@ -193,7 +195,7 @@ void setup()
 
   // Enable PWM mode for input switch
   inputSwitch.attach(PWM_PIN);
-  inputSwitch.writeMicroseconds(PWM_LOW);
+  switchVideoSource();
   
   // Show start screen
   if (options[SHOW_STARTSCREEN_OPTION])
@@ -210,44 +212,65 @@ void setup()
 //******************************************************************************
 void loop()
 {
-  switch (lastClick = getClickType( BUTTON_PIN ))
-  {
-    case NO_CLICK: // do nothing
-      break;
-
-    case WAKEUP_CLICK:  // do nothing
-      break;
-
-    case EVEN_LONGER_CLICK: // switch video source
-      switchVideoSource();
-      displayUpdateTimer = millis() +  RSSI_STABILITY_DELAY_MS ;
-      break;
+  if (videoSource == VIDEO_1){
+    switch (lastClick = getClickType( BUTTON_PIN ))
+    {
+      case NO_CLICK: // do nothing
+        break;
+  
+      case WAKEUP_CLICK:  // do nothing
+        break;
+  
+      case EVEN_LONGER_CLICK: // switch video source
+        switchVideoSource();
+        drawChannelScreen(currentChannel, 0);
+        displayUpdateTimer = millis() +  RSSI_STABILITY_DELAY_MS ;
+        break;
+      
+      case LONG_LONG_CLICK: // graphical band scanner
+        currentChannel = bestChannelMatch(graphicScanner(getFrequency(currentChannel)));
+        drawChannelScreen(currentChannel, 0);
+        displayUpdateTimer = millis() +  RSSI_STABILITY_DELAY_MS ;
+        break;
+  
+      case LONG_CLICK:      // auto search
+        drawAutoScanScreen();
+        currentChannel = bestChannelMatch(autoScan(getFrequency(currentChannel)));
+        drawChannelScreen(currentChannel, 0);
+        displayUpdateTimer = millis() +  RSSI_STABILITY_DELAY_MS ;
+        break;
+  
+      case SINGLE_CLICK: // up the frequency
+        currentChannel = nextChannel( currentChannel );
+        setRTC6715Frequency(getFrequency(currentChannel));
+        drawChannelScreen(currentChannel, 0);
+        break;
+  
+      case DOUBLE_CLICK:  // down the frequency
+        currentChannel = previousChannel( currentChannel );
+        setRTC6715Frequency(getFrequency(currentChannel));
+        drawChannelScreen(currentChannel, 0);
+        break;
+    }
     
-    case LONG_LONG_CLICK: // graphical band scanner
-      currentChannel = bestChannelMatch(graphicScanner(getFrequency(currentChannel)));
-      drawChannelScreen(currentChannel, 0);
-      displayUpdateTimer = millis() +  RSSI_STABILITY_DELAY_MS ;
-      break;
-
-    case LONG_CLICK:      // auto search
-      drawAutoScanScreen();
-      currentChannel = bestChannelMatch(autoScan(getFrequency(currentChannel)));
-      drawChannelScreen(currentChannel, 0);
-      displayUpdateTimer = millis() +  RSSI_STABILITY_DELAY_MS ;
-      break;
-
-    case SINGLE_CLICK: // up the frequency
-      currentChannel = nextChannel( currentChannel );
-      setRTC6715Frequency(getFrequency(currentChannel));
-      drawChannelScreen(currentChannel, 0);
-      break;
-
-    case DOUBLE_CLICK:  // down the frequency
-      currentChannel = previousChannel( currentChannel );
-      setRTC6715Frequency(getFrequency(currentChannel));
-      drawChannelScreen(currentChannel, 0);
-      break;
   }
+  else {
+    switch (lastClick = getClickType( BUTTON_PIN ))
+    {
+      case NO_CLICK: // do nothing
+        break;
+  
+      case WAKEUP_CLICK:  // do nothing
+        break;
+  
+      default: // switch video source
+        switchVideoSource();
+        drawChannelScreen(currentChannel, 0);
+        displayUpdateTimer = millis() +  RSSI_STABILITY_DELAY_MS ;
+        break;
+    } 
+  }
+  
   // Reset screensaver timer after each key click
   if  (lastClick != NO_CLICK )
     saveScreenTimer = millis() + SAVE_SCREEN_DELAY_MS;
@@ -950,7 +973,7 @@ void drawStartScreen( void ) {
 //* function: drawChannelScreen
 //*         : draws the standard screen with channel information
 //******************************************************************************
-void drawChannelScreen( uint8_t channel, uint16_t rssi) {
+void orig_drawChannelScreen( uint8_t channel, uint16_t rssi) {
   char buffer[22];
   uint8_t i;
 
@@ -1135,9 +1158,77 @@ void activateScreenSaver( void)
 //******************************************************************************
 void switchVideoSource(void)
 {
-
-  
+  switch (videoSource) {
+    case VIDEO_1:
+      videoSource = VIDEO_2;
+      break;
+      
+    case VIDEO_2:
+      videoSource = VIDEO_3;
+      break;
+    
+    default:
+      videoSource = VIDEO_1;
+      break;
+  }
+  inputSwitch.writeMicroseconds(videoSource);
 }
 
+//******************************************************************************
+//* function: new_drawChannelScreen
+//*         : draws the standard screen with channel information
+//******************************************************************************
+void drawChannelScreen( uint8_t channel, uint16_t rssi) {
+  char buffer[22];
+  uint8_t i;
 
+  display.clearDisplay();
+  display.setTextColor(WHITE);
+  
+  if (videoSource == VIDEO_1){
+    display.setCursor(10, 0);
+    display.setTextSize(3);
+    display.print(getFrequency(channel));
+    display.setCursor(75, 7);
+    display.setTextSize(2);
+    display.print(F(" MHz"));
+    
+    display.setCursor(0, 27);
+    display.setTextSize(1);
+    display.print(F("  Channel    RSSI"));
+    display.setCursor(0, 39);
+    display.setTextSize(2);
+    display.print(F(" "));
+    display.print(F(" "));
+    display.print(shortNameOfChannel(channel, buffer));
+    display.print(F("  "));
+    display.print(rssi);
+    display.setCursor(0, 57);
+    display.setTextSize(1);
+    longNameOfChannel(channel, buffer);
+    i = (21 - strlen(buffer)) / 2;
+    for (; i; i--) {
+      display.print(F(" "));
+    }
+    display.print( buffer );
+    
+  }
+  
+  if (videoSource == VIDEO_2){
+    display.setCursor(10, 0);
+    display.setTextSize(3);
+    display.print("EXT-IN");
+  }
+
+  if (videoSource == VIDEO_3){
+    display.setCursor(10, 0);
+    display.setTextSize(3);
+    display.print("DVR-IN");
+  }
+
+  display.drawLine(0, 24, 127, 24, WHITE);
+  batteryMeter();
+  
+  display.display();
+}
 
